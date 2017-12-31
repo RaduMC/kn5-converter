@@ -38,6 +38,24 @@ namespace kn5_converter
             public string txDetail;
 
             public string shaderProps = "";
+
+            public int alphaBlend = 0;
+            public int alphaTest = 0;
+            public int depthMode = 0;
+            public List<Var> var = new List<Var>();
+            public List<Res> res = new List<Res>(); 
+        }
+
+        public class Var
+        {
+            public string name;
+            public float value;
+        }
+        public class Res
+        {
+            public string name;
+            public int slot;
+            public string texture;
         }
 
         public class kn5Texture
@@ -117,6 +135,7 @@ namespace kn5_converter
                     {
                         case "fbx":
                             ExportFBX(theModel);
+                            ExportIni(theModel);
                             break;
                         case "obj":
                             ExportOBJ(theModel, false);
@@ -147,6 +166,7 @@ namespace kn5_converter
                         {
                             case "fbx":
                                 ExportFBX(theModel);
+                                ExportIni(theModel);
                                 break;
                             case "obj":
                                 ExportOBJ(theModel, false);
@@ -228,8 +248,18 @@ namespace kn5_converter
 
                         newMaterial.name = ReadStr(binStream, binStream.ReadInt32());
                         newMaterial.shader = ReadStr(binStream, binStream.ReadInt32());
-                        short ashort = binStream.ReadInt16();
-                        if (newModel.version > 4) { int azero = binStream.ReadInt32(); }
+
+                        byte alphaBlend = binStream.ReadByte();
+                        newMaterial.alphaBlend = alphaBlend;
+                        byte alphaTest = binStream.ReadByte();
+                        newMaterial.alphaTest = alphaTest;
+
+                        if (newModel.version > 4)
+                        {
+                            byte depthMode = binStream.ReadByte();
+                            newMaterial.depthMode = depthMode;
+                            binStream.BaseStream.Position += 3;
+                        }
 
                         int propCount = binStream.ReadInt32();
                         for (int p = 0; p < propCount; p++)
@@ -237,6 +267,11 @@ namespace kn5_converter
                             string propName = ReadStr(binStream, binStream.ReadInt32());
                             float propValue = binStream.ReadSingle();
                             newMaterial.shaderProps += propName + " = " + propValue.ToString() + "&cr;&lf;";
+
+                            Var newVar = new Var();
+                            newVar.name = propName;
+                            newVar.value = propValue;
+                            newMaterial.var.Add(newVar);
 
                             switch (propName)
                             {
@@ -277,6 +312,12 @@ namespace kn5_converter
                             string texName = ReadStr(binStream, binStream.ReadInt32());
 
                             newMaterial.shaderProps += sampleName + " = " + texName + "&cr;&lf;";
+
+                            Res newRes = new Res();
+                            newRes.name = sampleName;
+                            newRes.slot = sampleSlot;
+                            newRes.texture = texName;
+                            newMaterial.res.Add(newRes);
 
                             switch (sampleName)
                             {
@@ -1074,6 +1115,54 @@ namespace kn5_converter
                 }
             }
             else { Console.WriteLine("File already exists: {0}.fbx", srcModel.modelName); }
+        }
+
+        private static void ExportIni(kn5Model srcModel)
+        {
+            if (!File.Exists(srcModel.modelDir + srcModel.modelName + ".fbx.ini"))
+            {
+                Console.WriteLine("Exporting {0}.fbx.ini", srcModel.modelName);
+
+                using (StreamWriter INIWriter = new StreamWriter(File.Create(srcModel.modelDir + srcModel.modelName + ".fbx.ini")))
+                {
+
+                    INIWriter.WriteLine("[HEADER]");
+                    INIWriter.WriteLine("VERSION = 3");
+                    INIWriter.WriteLine("");
+                    INIWriter.WriteLine("[MATERIAL_LIST]");
+                    INIWriter.WriteLine("COUNT=" + srcModel.materials.Count);
+                    INIWriter.WriteLine("");
+
+                    for (int i = 0; i < srcModel.materials.Count; i++)
+                    {
+                        INIWriter.WriteLine("[MATERIAL_" + i + "]");
+                        INIWriter.WriteLine("NAME=" + srcModel.materials[i].name);
+                        INIWriter.WriteLine("SHADER=" + srcModel.materials[i].shader);
+                        INIWriter.WriteLine("ALPHABLEND=" + srcModel.materials[i].alphaBlend);
+                        INIWriter.WriteLine("APLHATEST=" + srcModel.materials[i].alphaTest);
+                        INIWriter.WriteLine("DEPTHMODE=" + srcModel.materials[i].depthMode);
+                        INIWriter.WriteLine("VARCOUNT=" + srcModel.materials[i].var.Count);
+                        for(int j = 0; j < srcModel.materials[i].var.Count; j++)
+                        {
+                            INIWriter.WriteLine("VAR_" + j + "_NAME=" + srcModel.materials[i].var[j].name);
+                            INIWriter.WriteLine("VAR_" + j + "_FLOAT1=" + srcModel.materials[i].var[j].value.ToString("0.0"));
+                            INIWriter.WriteLine("VAR_" + j + "_FLOAT2=0.0,0.0");
+                            INIWriter.WriteLine("VAR_" + j + "_FLOAT3=0,0,0");
+                            INIWriter.WriteLine("VAR_" + j + "_FLOAT4=0,0,0,0");
+                        }
+                        INIWriter.WriteLine("RESCOUNT=" + srcModel.materials[i].res.Count);
+                        for(int j = 0; j < srcModel.materials[i].res.Count; j++)
+                        {
+                            INIWriter.WriteLine("RES_" + j + "_NAME=" + srcModel.materials[i].res[j].name);
+                            INIWriter.WriteLine("RES_" + j + "_SLOT=" + srcModel.materials[i].res[j].slot);
+                            INIWriter.WriteLine("RES_" + j + "_TEXTURE=" + srcModel.materials[i].res[j].texture);
+                        }
+                        INIWriter.WriteLine("");
+                    }
+                }
+
+            }
+            else { Console.WriteLine("File already exists: {0}.fbx.ini", srcModel.modelName); }
         }
 
         private static byte[] RandomColorGenerator(string name)
